@@ -14,10 +14,12 @@ from pathlib import Path
 import yaml
 
 from wolf.report.builder import (
+    append_history,
     build_html_body,
     build_machine_entry,
     build_plaintext_body,
     build_subject,
+    build_weekly_rollup,
     is_weekly_day,
     should_send_daily,
 )
@@ -46,13 +48,20 @@ def main(argv: list[str] | None = None) -> int:
     weekly = is_weekly_day()
     send_it = weekly or should_send_daily(entries)
 
+    # Append every run to history regardless of send/skip, so the weekly
+    # rollup accumulates real days starting today — not gated on sends.
+    for e in entries:
+        if not args.dry_run:
+            append_history(incoming_dir, e)
+
     if not send_it:
         print("wolf-report: all green, not Monday — nothing to send")
         return 0
 
+    rollups = build_weekly_rollup(incoming_dir, entries) if weekly else None
     subject = build_subject(entries, weekly)
-    body = build_plaintext_body(entries, weekly)
-    html_body = build_html_body(entries, weekly)
+    body = build_plaintext_body(entries, weekly, rollups)
+    html_body = build_html_body(entries, weekly, rollups)
 
     if args.dry_run:
         print(f"Subject: {subject}\n\n{body}")
