@@ -1,9 +1,10 @@
 # Wolf per-machine settings — documented example.
 #
 # This file is NOT committed to the Wolf repo. Each machine keeps its own copy
-# outside the repo (default path: /etc/wolf/settings.yaml, or set $WOLF_SETTINGS
-# to point elsewhere). No machine names, addresses, or credentials belong in
-# the Wolf repo itself — only here, in the private per-machine copy.
+# outside the repo. Resolution order: $WOLF_SETTINGS, then
+# ~/.config/wolf/settings.yaml, then /etc/wolf/settings.yaml. No machine
+# names, addresses, or credentials belong in the Wolf repo itself — only
+# here, in the private per-machine copy.
 
 # The machine's name, as it appears in the consolidated SysAdmin report.
 name: darkseid
