@@ -27,6 +27,13 @@ class MachineReportEntry:
     last_run_at: str | None
     missed_run_colour: Colour
     summary_lines: list[str]
+    # One row per individual check, each carrying its own colour — matches
+    # Night Watch's per-check add_row() table instead of one row per machine.
+    summary_rows: list[tuple[Colour, str]] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.summary_rows is None:
+            self.summary_rows = [(self.colour, line) for line in self.summary_lines]
 
 
 def _parse_iso(s: str) -> datetime:
@@ -86,38 +93,47 @@ def build_machine_entry(
             last_run_at=None,
             missed_run_colour=Colour.RED,
             summary_lines=["no run result found"],
+            summary_rows=[(Colour.RED, "no run result found")],
         )
 
     run_colour = Colour[data.get("colour", "RED")]
     last_run_at = data.get("finished_at") or data.get("started_at")
     missed = missed_run_colour(last_run_at, yellow_days, red_days, now)
 
-    lines = []
+    rows: list[tuple[Colour, str]] = [(missed, f"last run: {last_run_at or 'never'}")]
     freed = data.get("cache_freed_bytes", 0)
     if freed:
-        lines.append(f"cache: freed {freed / (1000**3):.2f} GB")
+        rows.append((Colour.GREEN, f"cache: freed {freed / (1000**3):.2f} GB"))
     reaped = data.get("processes_reaped", [])
     if reaped:
-        lines.append(f"processes reaped: {len(reaped)}")
+        rows.append((Colour.GREEN, f"processes reaped: {len(reaped)}"))
     docker_freed = data.get("docker_freed_bytes", 0)
     if docker_freed:
-        lines.append(f"docker: freed {docker_freed / (1000**3):.2f} GB")
+        rows.append((Colour.GREEN, f"docker: freed {docker_freed / (1000**3):.2f} GB"))
     reboot = data.get("reboot", {})
     if reboot:
-        lines.append(f"reboot: {reboot.get('reason', 'n/a')}")
+        reboot_colour = Colour.RED if reboot.get("done") else Colour.YELLOW
+        rows.append((reboot_colour, f"reboot: {reboot.get('reason', 'n/a')}"))
     updates_pending = data.get("updates_pending", 0)
     if updates_pending:
-        lines.append(f"updates pending: {updates_pending}")
+        updates_colour = Colour.YELLOW if updates_pending < 20 else Colour.RED
+        rows.append((updates_colour, f"updates pending: {updates_pending}"))
     for svc in data.get("services", []):
         if not svc.get("ok"):
-            lines.append(f"service down: {svc.get('name')} ({svc.get('detail')})")
+            rows.append(
+                (Colour.RED, f"service down: {svc.get('name')} ({svc.get('detail')})")
+            )
+
+    if not rows[1:]:
+        rows.append((Colour.GREEN, "all green, nothing to report"))
 
     return MachineReportEntry(
         machine=machine,
         colour=worst([run_colour, missed]),
         last_run_at=last_run_at,
         missed_run_colour=missed,
-        summary_lines=lines or ["all green, nothing to report"],
+        summary_lines=[line for _, line in rows],
+        summary_rows=rows,
     )
 
 
@@ -143,9 +159,9 @@ def build_plaintext_body(entries: list[MachineReportEntry], weekly: bool) -> str
     kind = "Weekly" if weekly else "Daily"
     lines = [f"SysAdmin {kind} Report — {now.strftime('%Y-%m-%d %H:%M')} UTC", ""]
     for e in entries:
-        lines.append(f"{e.colour.emoji} {e.machine} — last run: {e.last_run_at or 'never'}")
-        for s in e.summary_lines:
-            lines.append(f"    - {s}")
+        lines.append(f"{e.colour.emoji} {e.machine}")
+        for row_colour, detail in e.summary_rows:
+            lines.append(f"    {row_colour.name}: {detail}")
         lines.append("")
     return "\n".join(lines)
 
@@ -156,10 +172,9 @@ _STATE_LABEL = {Colour.RED: "RED", Colour.YELLOW: "WARN", Colour.GREEN: "OK"}
 
 def build_html_body(entries: list[MachineReportEntry], weekly: bool) -> str:
     """Multipart HTML body matching the existing Night Watch email's visual
-    language exactly: coloured header bar, monospace pill table per row,
-    same footer line shape — see ~/.local/bin/night-watch::send_report on
-    Alghul. Consolidates every machine into one table instead of one row
-    per machine's own checks.
+    language exactly: coloured header bar, one pill-table row PER CHECK
+    (not per machine) — see ~/.local/bin/night-watch::send_report on Alghul.
+    A machine sub-header row separates each machine's block of checks.
     """
     now = datetime.now(UTC)
     kind = "Weekly" if weekly else "Daily"
@@ -168,19 +183,21 @@ def build_html_body(entries: list[MachineReportEntry], weekly: bool) -> str:
 
     rows = []
     for e in entries:
-        pill = _PILL_COLOUR[e.colour]
-        state = _STATE_LABEL[e.colour]
-        last_run = e.last_run_at or "never"
-        detail = "; ".join(e.summary_lines)
         rows.append(
-            f'<tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;'
-            f'text-align:center"><span style="background:{pill};color:#000;'
-            f'padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px">'
-            f"{state}</span></td>"
-            f'<td style="padding:6px 10px;border-bottom:1px solid #ddd;'
-            f'font-family:monospace;font-size:12px">{e.machine} — last run: '
-            f"{last_run} — {detail}</td></tr>"
+            '<tr><td colspan="2" style="padding:10px 10px 4px;font-weight:700;'
+            f'font-size:13px">{e.machine}</td></tr>'
         )
+        for row_colour, detail in e.summary_rows:
+            pill = _PILL_COLOUR[row_colour]
+            state = _STATE_LABEL[row_colour]
+            rows.append(
+                f'<tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;'
+                f'text-align:center"><span style="background:{pill};color:#000;'
+                f'padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px">'
+                f"{state}</span></td>"
+                f'<td style="padding:6px 10px;border-bottom:1px solid #ddd;'
+                f'font-family:monospace;font-size:12px">{detail}</td></tr>'
+            )
 
     return (
         '<html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;'
@@ -192,7 +209,7 @@ def build_html_body(entries: list[MachineReportEntry], weekly: bool) -> str:
         f'{now.strftime("%Y-%m-%d %H:%M")} UTC</p>\n'
         '<table style="border-collapse:collapse;width:100%;font-size:13px">'
         '<tr style="background:#f4f4f4"><th style="padding:6px 10px;width:110px">'
-        'Status</th><th style="text-align:left;padding:6px 10px">Machine</th></tr>'
+        'Status</th><th style="text-align:left;padding:6px 10px">Check</th></tr>'
         + "".join(rows)
         + '</table><p style="color:#999;font-size:11px;margin-top:14px">'
         "SysAdmin fleet report · Wolf · 09:00 UTC · daily only when not green, "
