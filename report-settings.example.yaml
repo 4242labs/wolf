@@ -1,0 +1,26 @@
+# SysAdmin Daily/Weekly Report — documented example.
+#
+# Not committed to the Wolf repo (no machine names/addresses here in the real
+# copy, though this report's own list of machine names is less sensitive than
+# Wolf's per-machine settings — kept out anyway for consistency). Lives
+# wherever the Dagu job's working directory expects it; path passed via
+# `wolf-report --config`.
+
+# Directory where each machine's Wolf run result lands. For the SSH-push
+# delivery model, this is the remote_path configured in each machine's Wolf
+# settings.example.yaml -> delivery.remote_path, read on the machine that
+# hosts the Dagu job (Alghul).
+incoming_dir: "/home/42piratas/.local/share/wolf/incoming"
+
+machines:
+  - name: darkseid
+    missed_run_yellow_days: 3
+    missed_run_red_days: 5
+  - name: alghul
+    missed_run_yellow_days: 1
+    missed_run_red_days: 2
+
+# SMTP credentials are read from environment variables at send time
+# (WOLF_SMTP_HOST, WOLF_SMTP_PORT, WOLF_SMTP_USER, WOLF_SMTP_PASSWORD,
+# WOLF_MAILTO), populated by the Dagu job from Vault. None of them belong
+# in this file.

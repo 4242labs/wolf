@@ -1,0 +1,30 @@
+# Dagu workflow definition for the SysAdmin Daily/Weekly Report.
+#
+# NOT deployed by this commit. Deploying/registering this with Alfred's Dagu
+# scheduler is a cloud-account change and requires the operator on the same
+# turn (per SYSADMIN's authority model) — this file documents the intended
+# DAG so deployment is a copy-paste, not a design exercise, when that
+# operator-present session happens.
+#
+# Modelled on the existing 42labs-alghul-night-watch DAG (restricted SSH key,
+# Tailscale reachability, Vault-sourced SMTP creds) — see
+# tortuga/crew/sysadmin/logs/log-260915-2053-42piratas-alfred-dagu-alghul-night-watch.md.
+
+name: 42labs-sysadmin-report
+schedule: "0 9 * * *"  # 09:00 UTC daily; the script itself decides whether to actually send.
+params:
+  - WOLF_REPORT_CONFIG: /home/42piratas/.config/wolf/report-settings.yaml
+
+steps:
+  - name: send-report
+    command: wolf-report --config ${WOLF_REPORT_CONFIG}
+    # SMTP credentials are injected as environment variables from Vault by
+    # the job runner, matching how night-watch.sh sources them today
+    # (ensure_vault_secrets() in ~/.local/bin/night-watch on Alghul):
+    #   WOLF_SMTP_HOST, WOLF_SMTP_PORT, WOLF_SMTP_USER, WOLF_SMTP_PASSWORD, WOLF_MAILTO
+    env:
+      - WOLF_SMTP_HOST: "${WOLF_SMTP_HOST}"
+      - WOLF_SMTP_PORT: "${WOLF_SMTP_PORT}"
+      - WOLF_SMTP_USER: "${WOLF_SMTP_USER}"
+      - WOLF_SMTP_PASSWORD: "${WOLF_SMTP_PASSWORD}"
+      - WOLF_MAILTO: "${WOLF_MAILTO}"

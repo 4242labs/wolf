@@ -1,0 +1,30 @@
+[project]
+name = "wolf"
+version = "0.1.0"
+description = "Fleet cleanup, healing and health-check tool: one agent per machine, one consolidated report."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+authors = [
+    { name = "42labs", email = "ahoy@42labs.io" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+wolf = "wolf.cli:main"
+wolf-report = "wolf.report.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100

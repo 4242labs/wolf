@@ -1,0 +1,48 @@
+# Wolf per-machine settings — documented example.
+#
+# This file is NOT committed to the Wolf repo. Each machine keeps its own copy
+# outside the repo (default path: /etc/wolf/settings.yaml, or set $WOLF_SETTINGS
+# to point elsewhere). No machine names, addresses, or credentials belong in
+# the Wolf repo itself — only here, in the private per-machine copy.
+
+# The machine's name, as it appears in the consolidated SysAdmin report.
+name: darkseid
+
+# When this machine's Wolf run fires, UTC. Configurable per machine.
+run_time_utc: "06:00"
+
+cache:
+  # Package-cache cap in GiB. Trimmed to this cap regardless of free disk space.
+  cap_gb: 50
+  # Families to trim, oldest-first, in this order. Omit a family to exclude it.
+  families: [npm, npx, pnpm, uv, pip, poetry, homebrew, cargo]
+
+docker:
+  # Set true only on machines that run Docker (e.g. Alghul).
+  enabled: false
+  cap_gb: 30
+
+reboot:
+  # Darkseid never reboots itself (report-only). Set true on Alghul.
+  allowed: false
+  yellow_days: 3
+  red_days: 5
+  # Hours within which any Hermes session-state file's mtime blocks a reboot.
+  idle_chat_hours: 24
+
+missed_run:
+  yellow_days: 3
+  red_days: 5
+
+delivery:
+  # SSH push target for the structured run result: Darkseid -> Alghul.
+  # Leave all fields empty on the machine that IS the aggregation point
+  # (Alghul itself) — Wolf then writes results locally only.
+  host: "alghul.example.ts.net"
+  user: "42piratas"
+  remote_path: "/home/42piratas/.local/share/wolf/incoming"
+  ssh_identity: "/Users/42piratas/.ssh/wolf_delivery_ed25519"
+
+# Where this machine's own Wolf state (lock file, run logs, latest result)
+# lives. Defaults to ~/.local/share/wolf if omitted.
+state_dir: "/Users/42piratas/.local/share/wolf"
