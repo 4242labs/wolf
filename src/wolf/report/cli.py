@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from wolf.report.builder import (
+    build_html_body,
     build_machine_entry,
     build_plaintext_body,
     build_subject,
@@ -51,12 +52,13 @@ def main(argv: list[str] | None = None) -> int:
 
     subject = build_subject(entries, weekly)
     body = build_plaintext_body(entries, weekly)
+    html_body = build_html_body(entries, weekly)
 
     if args.dry_run:
         print(f"Subject: {subject}\n\n{body}")
         return 0
 
-    send_report(subject, body)
+    send_report(subject, body, html_body)
     print(f"wolf-report: sent '{subject}'")
     return 0
 

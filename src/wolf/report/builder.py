@@ -148,3 +148,53 @@ def build_plaintext_body(entries: list[MachineReportEntry], weekly: bool) -> str
             lines.append(f"    - {s}")
         lines.append("")
     return "\n".join(lines)
+
+
+_PILL_COLOUR = {Colour.RED: "#c0392b", Colour.YELLOW: "#f1c40f", Colour.GREEN: "#2ecc71"}
+_STATE_LABEL = {Colour.RED: "RED", Colour.YELLOW: "WARN", Colour.GREEN: "OK"}
+
+
+def build_html_body(entries: list[MachineReportEntry], weekly: bool) -> str:
+    """Multipart HTML body matching the existing Night Watch email's visual
+    language exactly: coloured header bar, monospace pill table per row,
+    same footer line shape — see ~/.local/bin/night-watch::send_report on
+    Alghul. Consolidates every machine into one table instead of one row
+    per machine's own checks.
+    """
+    now = datetime.now(UTC)
+    kind = "Weekly" if weekly else "Daily"
+    overall = worst([e.colour for e in entries])
+    bar_colour = _PILL_COLOUR[overall]
+
+    rows = []
+    for e in entries:
+        pill = _PILL_COLOUR[e.colour]
+        state = _STATE_LABEL[e.colour]
+        last_run = e.last_run_at or "never"
+        detail = "; ".join(e.summary_lines)
+        rows.append(
+            f'<tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;'
+            f'text-align:center"><span style="background:{pill};color:#000;'
+            f'padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px">'
+            f"{state}</span></td>"
+            f'<td style="padding:6px 10px;border-bottom:1px solid #ddd;'
+            f'font-family:monospace;font-size:12px">{e.machine} — last run: '
+            f"{last_run} — {detail}</td></tr>"
+        )
+
+    return (
+        '<html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;'
+        'color:#222;max-width:720px">\n'
+        f'<div style="background:{bar_colour};color:#fff;padding:10px 14px;'
+        f'border-radius:6px;font-weight:700">SysAdmin — {kind} Report — '
+        f"{_STATE_LABEL[overall]}</div>\n"
+        f'<p style="color:#666;font-size:13px">ALL MACHINES · '
+        f'{now.strftime("%Y-%m-%d %H:%M")} UTC</p>\n'
+        '<table style="border-collapse:collapse;width:100%;font-size:13px">'
+        '<tr style="background:#f4f4f4"><th style="padding:6px 10px;width:110px">'
+        'Status</th><th style="text-align:left;padding:6px 10px">Machine</th></tr>'
+        + "".join(rows)
+        + '</table><p style="color:#999;font-size:11px;margin-top:14px">'
+        "SysAdmin fleet report · Wolf · 09:00 UTC · daily only when not green, "
+        "weekly every Monday</p></body></html>"
+    )
