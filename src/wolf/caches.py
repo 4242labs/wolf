@@ -24,6 +24,9 @@ class TrimResult:
 def _dir_size_bytes(path: Path) -> int:
     if not path.exists():
         return 0
+    du_bytes = _dir_size_via_du(path)
+    if du_bytes is not None:
+        return du_bytes
     total = 0
     for p in path.rglob("*"):
         try:
@@ -32,6 +35,29 @@ def _dir_size_bytes(path: Path) -> int:
         except OSError:
             continue
     return total
+
+
+def _dir_size_via_du(path: Path) -> int | None:
+    """Fast path for sizing a cache directory: the system `du` binary walks
+    the tree in C and is an order of magnitude faster than a Python
+    rglob+stat loop over tens of thousands of small cache files. Falls back
+    to None (caller does the slow walk) if `du` is unavailable or fails.
+    """
+    if shutil.which("du") is None:
+        return None
+    try:
+        # -s: summary total only. -k: force 1024-byte blocks (consistent
+        # output across BSD/macOS and GNU/Linux du, which default to
+        # different block sizes otherwise).
+        proc = subprocess.run(
+            ["du", "-sk", str(path)], capture_output=True, text=True, check=False, timeout=60
+        )
+        if proc.returncode != 0:
+            return None
+        kib = int(proc.stdout.split()[0])
+        return kib * 1024
+    except (subprocess.SubprocessError, ValueError, IndexError, OSError):
+        return None
 
 
 def _oldest_first_trim(path: Path, target_bytes_to_free: int) -> int:

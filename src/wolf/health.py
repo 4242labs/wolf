@@ -9,7 +9,9 @@ settings file via which checks are enabled per machine.
 
 from __future__ import annotations
 
+import re
 import shutil
+import socket
 import subprocess
 from dataclasses import dataclass
 
@@ -21,7 +23,7 @@ class HealthCheck:
     detail: str
 
 
-def _service_active(unit: str, user_scope: bool = False) -> bool:
+def _systemd_service_active(unit: str, user_scope: bool = False) -> bool:
     cmd = ["systemctl"]
     if user_scope:
         cmd.append("--user")
@@ -32,11 +34,59 @@ def _service_active(unit: str, user_scope: bool = False) -> bool:
         return False
 
 
+def _tcp_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _command_exits_zero(command: list[str]) -> bool:
+    try:
+        return subprocess.run(command, capture_output=True, check=False).returncode == 0
+    except FileNotFoundError:
+        return False
+
+
 def check_service(label: str, unit: str, user_scope: bool = False) -> HealthCheck:
-    if shutil.which("systemctl") is None:
-        return HealthCheck(label, False, "systemctl not available (non-systemd host)")
-    ok = _service_active(unit, user_scope)
-    return HealthCheck(label, ok, "active" if ok else "inactive")
+    """Service-active check. Prefers systemd where present (Alghul); on a
+    non-systemd host (Darkseid, macOS) falls back to a tool-native signal
+    instead of reporting "not available" for every service.
+    """
+    if shutil.which("systemctl") is not None:
+        ok = _systemd_service_active(unit, user_scope)
+        return HealthCheck(label, ok, "active" if ok else "inactive")
+
+    # macOS fallbacks, one per service this check set actually names.
+    if label == "SSH":
+        ok = _tcp_port_open("127.0.0.1", 22)
+        return HealthCheck(label, ok, "active" if ok else "not listening on :22")
+    if label == "Tailscale":
+        ok = _tailscale_interface_up()
+        return HealthCheck(label, ok, "active" if ok else "no tailscale utun interface found")
+    if label == "Docker":
+        ok = _command_exits_zero(["docker", "info"])
+        return HealthCheck(label, ok, "active" if ok else "docker info failed")
+    if label == "Headroom":
+        ok = _command_exits_zero(["pgrep", "-f", "headroom.cli proxy"])
+        return HealthCheck(label, ok, "active" if ok else "no headroom process found")
+    return HealthCheck(label, False, "no non-systemd fallback defined for this service")
+
+
+def _tailscale_interface_up() -> bool:
+    """Tailscale's own CLI can crash on a broken bundle-identifier registry
+    (seen in practice) without that meaning the daemon or tunnel is down.
+    A `utun` interface carrying a Tailscale CGNAT address (100.64.0.0/10) is
+    the ground truth signal instead.
+    """
+    try:
+        proc = subprocess.run(["ifconfig"], capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return False
+    if proc.returncode != 0:
+        return False
+    return bool(re.search(r"inet 100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\.", proc.stdout))
 
 
 def check_command(label: str, command: str) -> HealthCheck:
