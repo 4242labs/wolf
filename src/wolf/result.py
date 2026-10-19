@@ -80,7 +80,11 @@ def deliver(result: RunResult, state_dir: Path, delivery: DeliveryConfig) -> str
     local_latest = state_dir / "latest.json"
     remote = f"{delivery.user}@{delivery.host}:{delivery.remote_path}/{result.machine}-latest.json"
 
-    cmd = ["scp"]
+    # -O forces the legacy SCP protocol. The restricted forced-command on the
+    # delivery target matches on the literal 'scp -t <path>' invocation that
+    # protocol sends; modern scp defaults to SFTP, which that match (and the
+    # restriction it enforces) does not recognise at all.
+    cmd = ["scp", "-O"]
     if delivery.ssh_identity:
         cmd += ["-i", delivery.ssh_identity]
     cmd += ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", str(local_latest), remote]

@@ -14,6 +14,7 @@ import yaml
 
 DEFAULT_SETTINGS_ENV_VAR = "WOLF_SETTINGS"
 DEFAULT_SETTINGS_PATH = Path("/etc/wolf/settings.yaml")
+USER_SETTINGS_PATH = Path.home() / ".config/wolf/settings.yaml"
 
 
 @dataclass(frozen=True)
@@ -121,13 +122,17 @@ def load_machine_config(path: Path | None = None) -> MachineConfig:
     """Load a MachineConfig from a YAML settings file.
 
     Resolution order: explicit `path` argument, then $WOLF_SETTINGS, then
-    /etc/wolf/settings.yaml. Raises FileNotFoundError if none resolve.
+    ~/.config/wolf/settings.yaml, then /etc/wolf/settings.yaml. Raises
+    FileNotFoundError if none resolve.
     """
-    candidate = path or (
-        Path(os.environ[DEFAULT_SETTINGS_ENV_VAR])
-        if DEFAULT_SETTINGS_ENV_VAR in os.environ
-        else DEFAULT_SETTINGS_PATH
-    )
+    if path is not None:
+        candidate = path
+    elif DEFAULT_SETTINGS_ENV_VAR in os.environ:
+        candidate = Path(os.environ[DEFAULT_SETTINGS_ENV_VAR])
+    elif USER_SETTINGS_PATH.exists():
+        candidate = USER_SETTINGS_PATH
+    else:
+        candidate = DEFAULT_SETTINGS_PATH
     if not candidate.exists():
         raise FileNotFoundError(f"Wolf settings file not found: {candidate}")
 
